@@ -49,10 +49,69 @@ class CheckSession(Resource):
     
     
     
+    
+class Notes(Resource):
+    def get(self):
+        user_id = session.get('user_id')
+        if not user_id:
+            return {"error": "Login required"}, 401
+        
+        # Pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        notes_query = Note.query.filter_by(user_id=user_id).paginate(page=page, per_page=per_page)
+        
+        return {
+            "notes": [n.to_dict() for n in notes_query.items],
+            "total": notes_query.total,
+            "current_page": notes_query.page
+        }, 200
+
+    def post(self):
+        user_id = session.get('user_id')
+        if not user_id:
+            return {"error": "Login required"}, 401
+        
+        data = request.get_json()
+        try:
+            new_note = Note(title=data['title'], content=data['content'], user_id=user_id)
+            db.session.add(new_note)
+            db.session.commit()
+            return new_note.to_dict(), 201
+        except Exception as e:
+            return {"errors": [str(e)]}, 422
+
+class NoteById(Resource):
+    def patch(self, id):
+        user_id = session.get('user_id')
+        note = Note.query.filter_by(id=id, user_id=user_id).first()
+        if not note:
+            return {"error": "Note not found"}, 404
+        
+        data = request.get_json()
+        for attr in data:
+            setattr(note, attr, data[attr])
+        db.session.commit()
+        return note.to_dict(), 200
+
+    def delete(self, id):
+        user_id = session.get('user_id')
+        note = Note.query.filter_by(id=id, user_id=user_id).first()
+        if not note:
+            return {"error": "Note not found"}, 404
+        
+        db.session.delete(note)
+        db.session.commit()
+        return {}, 204
+    
+    
+    
 api.add_resource(Signup, '/signup')
 api.add_resource(Login, '/login')
 api.add_resource(Logout, '/logout')
 api.add_resource(CheckSession, '/me')
+api.add_resource(Notes, '/notes')
+api.add_resource(NoteById, '/notes/<int:id>')
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
