@@ -2,12 +2,22 @@ from flask import Flask, request, session, make_response
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from models import db, User, Note
+from flask_cors import CORS
+import os
+from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
 
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=False, 
+)
+
+app.secret_key = os.environ.get('SECRET_KEY') or 'dev-secret-key-12345'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+CORS(app, supports_credentials=True)
 migrate = Migrate(app, db)
 db.init_app(app)
 api = Api(app)
@@ -22,6 +32,9 @@ class Signup(Resource):
             db.session.commit()
             session['user_id'] = user.id
             return user.to_dict(), 201
+        except IntegrityError:
+            db.session.rollback() # Good practice to rollback the failed transaction
+            return {"error": "That username is already taken. Please try another."}, 422
         except Exception as e:
             return {"errors": [str(e)]}, 422
         
@@ -44,7 +57,8 @@ class CheckSession(Resource):
         user_id = session.get('user_id')
         if user_id:
             user = User.query.filter_by(id=user_id).first()
-            return user.to_dict(), 200
+            if user:
+                return user.to_dict(), 200
         return {"error": "Unauthorized"}, 401
     
     
@@ -59,7 +73,7 @@ class Notes(Resource):
         # Pagination
         page = request.args.get('page', 1, type=int)
         per_page = 10
-        notes_query = Note.query.filter_by(user_id=user_id).paginate(page=page, per_page=per_page)
+        notes_query = Note.query.filter_by(user_id=user_id).paginate(page=page, per_page=per_page, error_out=False)
         
         return {
             "notes": [n.to_dict() for n in notes_query.items],
@@ -90,7 +104,8 @@ class NoteById(Resource):
         
         data = request.get_json()
         for attr in data:
-            setattr(note, attr, data[attr])
+            if hasattr(note, attr):
+                setattr(note, attr, data[attr])
         db.session.commit()
         return note.to_dict(), 200
 
