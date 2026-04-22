@@ -37,6 +37,4 @@ with app.app_context():
     db.session.commit()
     
 
-    print("\nTry logging in with one of these usernames:")
-    for u in User.query.limit(5).all():
-        print(f"- {u.username}")
+   
