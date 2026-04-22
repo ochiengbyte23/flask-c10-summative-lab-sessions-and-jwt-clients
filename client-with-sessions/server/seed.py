@@ -11,7 +11,7 @@ with app.app_context():
     User.query.delete()
 
     users = []
-    for _ in range(10):
+    for _ in range(5):
         user = User(
             username=fake.unique.user_name()
         )
